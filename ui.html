@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body { font-family: sans-serif; padding: 1rem; }
+    button { background: #18A0FB; color: white; border: none; padding: 8px 12px; border-radius: 4px; cursor: pointer; }
+    button:disabled { background: #B3B3B3; cursor: not-allowed; }
+    p { font-size: 12px; color: #555; }
+    #status { font-size: 11px; color: #888; height: 1.2em; }
+  </style>
+</head>
+<body>
+  <h2>✨ Smart Layouts</h2>
+  <p>Select 2-10 layers and click the button to generate a new layout.</p>
+  <button id="generate" disabled>Generate Layout</button>
+  <p id="status">Loading model...</p>
+
+  <!-- Pin to the version matching your model -->
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.min.js"></script>
+
+  <script>
+    const generateBtn = document.getElementById('generate');
+    const statusText = document.getElementById('status');
+    const LATENT_DIM = 2;
+    const PROPERTIES_PER_CHILD = 4;
+    let decoder;
+
+    async function loadModel(modelData) {
+      if (!decoder) {
+        try {
+          // Extract exact bytes from Uint8Array
+          const w = modelData.modelWeights;
+          const weightData = w.buffer.slice(w.byteOffset, w.byteOffset + w.byteLength);
+
+          const modelArtifacts = {
+            modelTopology: modelData.modelJson.modelTopology,
+            weightSpecs: modelData.modelJson.weightsManifest[0].weights,
+            weightData
+          };
+
+          decoder = await tf.loadLayersModel(tf.io.fromMemory(modelArtifacts));
+
+          statusText.textContent = 'Model loaded successfully!';
+          generateBtn.disabled = false;
+          console.log("✅ Model loaded successfully");
+        } catch (err) {
+          console.error("❌ Failed to load model:", err);
+          statusText.textContent = 'Model failed to load (see console)';
+        }
+      }
+    }
+
+    // Listen for plugin → UI messages
+    window.onmessage = async (event) => {
+      const msg = event.data.pluginMessage;
+      if (msg.type === 'load-model') {
+        await loadModel(msg);
+      }
+    };
+
+    // Button handler: sample latent vector → predict → send layout back
+    generateBtn.onclick = async () => {
+      if (!decoder) {
+        console.error("❌ Model not loaded yet");
+        return;
+      }
+
+      const randomLatentVector = tf.randomNormal([1, LATENT_DIM]);
+      const generatedTensor = decoder.predict(randomLatentVector);
+      const generatedLayoutFlat = await generatedTensor.data();
+      tf.dispose([randomLatentVector, generatedTensor]);
+
+      const generatedLayout = [];
+      for (let i = 0; i < generatedLayoutFlat.length; i += PROPERTIES_PER_CHILD) {
+        generatedLayout.push(Array.from(generatedLayoutFlat.slice(i, i + PROPERTIES_PER_CHILD)));
+      }
+
+      parent.postMessage({ pluginMessage: { type: 'apply-layout', layout: generatedLayout } }, '*');
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,10 @@
+{
+  "compilerOptions": {
+    "target": "es6",
+    "strict": true,
+    "moduleResolution": "node",
+    "skipLibCheck": true,
+    "types": ["@figma/plugin-typings"]
+  },
+  "exclude": ["data_scraper"]
+}
